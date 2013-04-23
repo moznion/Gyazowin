@@ -791,8 +791,36 @@ BOOL saveId(const WCHAR* str)
 // PNG ファイルをアップロードする.
 BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 {
-	const TCHAR* UPLOAD_SERVER	= _T("gyazo.com");
-	const TCHAR* UPLOAD_PATH	= _T("/upload.cgi");
+	const int nSize = 256;
+	LPCTSTR DEFAULT_UPLOAD_SERVER = _T("gyazo.com");
+	LPCTSTR DEFAULT_UPLOAD_PATH   = _T("/upload.cgi");
+	LPCTSTR DEFAULT_USER_AGENT    = _T("User-Agent: Gyazowin/1.0\r\n");
+	const int DEFAULT_UPLOAD_SERVER_PORT = INTERNET_DEFAULT_HTTP_PORT;
+
+	TCHAR upload_server[nSize];
+	TCHAR upload_path[nSize];
+	TCHAR ua[nSize];
+	lstrcpy(upload_server, DEFAULT_UPLOAD_SERVER);
+	lstrcpy(upload_path, DEFAULT_UPLOAD_PATH);
+	lstrcpy(ua, DEFAULT_USER_AGENT);
+	int upload_server_port = DEFAULT_UPLOAD_SERVER_PORT;
+
+	TCHAR runtime_path[MAX_PATH+1];
+	TCHAR runtime_dirname[MAX_PATH+1];
+	TCHAR config_file[MAX_PATH+1];
+	if (0 != ::GetModuleFileName(NULL, runtime_path, MAX_PATH)) {
+		TCHAR tmp[MAX_PATH+1];
+		_tsplitpath_s(runtime_path, tmp, runtime_dirname, tmp, tmp);
+	}
+	lstrcpy(config_file, runtime_dirname);
+	lstrcat(config_file, _T("\\gyazo.ini"));
+	if (PathFileExists(config_file)) {
+		LPCTSTR SECTION_NAME = _T("gyazo");
+		GetPrivateProfileString(SECTION_NAME, _T("server"), DEFAULT_UPLOAD_SERVER, upload_server, sizeof(upload_server), config_file);
+		GetPrivateProfileString(SECTION_NAME, _T("path"), DEFAULT_UPLOAD_PATH, upload_path, sizeof(upload_path), config_file);
+		GetPrivateProfileString(SECTION_NAME, _T("user_agent"), DEFAULT_USER_AGENT, ua, sizeof(ua), config_file);
+		upload_server_port = GetPrivateProfileInt(SECTION_NAME, _T("port"), DEFAULT_UPLOAD_SERVER_PORT, config_file);
+	}
 
 	const char*  sBoundary = "----BOUNDARYBOUNDARY----";		// boundary
 	const char   sCrLf[]   = { 0xd, 0xa, 0x0 };					// 改行(CR+LF)
@@ -858,7 +886,7 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 	
 	// 接続先
 	HINTERNET hConnection = InternetConnect(hSession, 
-		UPLOAD_SERVER, INTERNET_DEFAULT_HTTP_PORT,
+		upload_server, upload_server_port,
 		NULL, NULL, INTERNET_SERVICE_HTTP, 0, NULL);
 	if(NULL == hSession) {
 		MessageBox(hwnd, _T("Cannot initiate connection"),
@@ -868,7 +896,7 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 
 	// 要求先の設定
 	HINTERNET hRequest    = HttpOpenRequest(hConnection,
-		_T("POST"), UPLOAD_PATH, NULL,
+		_T("POST"), upload_path, NULL,
 		NULL, NULL, INTERNET_FLAG_DONT_CACHE | INTERNET_FLAG_RELOAD, NULL);
 	if(NULL == hSession) {
 		MessageBox(hwnd, _T("Cannot compose post request"),
@@ -877,7 +905,6 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 	}
 
 	// User-Agentを指定
-	const TCHAR* ua = _T("User-Agent: Gyazowin/1.0\r\n");
 	BOOL bResult = HttpAddRequestHeaders(
 		hRequest, ua, _tcslen(ua), 
 		HTTP_ADDREQ_FLAG_ADD | HTTP_ADDREQ_FLAG_REPLACE);
